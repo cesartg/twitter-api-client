@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"os"
 )
 
 const (
@@ -50,8 +51,8 @@ func unmarshalCredentialsFromFile() {
 }
 
 func readCredentialsFile() []byte {
-	log.Print("INFO: Reading twitter credentials from file " + credentialsFile)
-	byteArray, err := ioutil.ReadFile(credentialsFile)
+	pwd, _ := os.Getwd()
+	byteArray, err := ioutil.ReadFile(pwd + "/" + credentialsFile)
 	if err != nil {
 		log.Panicf("Panicking. Error during reading twitter credentials from file %s. Error detail: %s",
 			credentialsFile, err)
@@ -62,13 +63,13 @@ func readCredentialsFile() []byte {
 // Sends an authorized request to the twitter API to given url and using the given http method.
 // Returns the response as string
 // This use the client credentials specified in config.json
-func SendTwitterApiRequest(absoluteUrl string, httpMethod string) ([]byte, error) {
+func SendTwitterApiRequest(absoluteURL string, httpMethod string) ([]byte, error) {
 	err := verifyCredentialsAreNotEmpty()
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(httpMethod, absoluteUrl, nil)
-	if (err != nil) {
+	req, err := http.NewRequest(httpMethod, absoluteURL, nil)
+	if err != nil {
 		return nil, err
 	}
 	authorizationHeaderValue := buildAuthorizationHeaderValue(httpMethod, req.URL)
@@ -83,15 +84,15 @@ func SendTwitterApiRequest(absoluteUrl string, httpMethod string) ([]byte, error
 func verifyCredentialsAreNotEmpty() error {
 	if len(credentials.AccessTokenSecret) == 0 || len(credentials.AccessToken) == 0 ||
 		len(credentials.ConsumerKey) == 0 || len(credentials.ConsumerSecret) == 0 {
-		return errors.New("Access token, consumer key and/or other credentials are empty");
+		return errors.New("Access token, consumer key and/or other credentials are empty")
 	}
 	return nil
 }
 
-func buildAuthorizationHeaderValue(httpMethod string, requestUrl *url.URL) string {
+func buildAuthorizationHeaderValue(httpMethod string, requestURL *url.URL) string {
 	var buffer bytes.Buffer
 	buffer.WriteString("OAuth ")
-	oAuthParams := generateOAuthParams(httpMethod, requestUrl)
+	oAuthParams := generateOAuthParams(httpMethod, requestURL)
 	sortedKeys := sortKeys(oAuthParams)
 	for i, k := range sortedKeys {
 		if i != 0 {
@@ -131,17 +132,17 @@ func doRequest (request *http.Request) ([]byte, error) {
 	return byteArray, err
 }
 
-func generateOAuthParams(httpMethod string, requestUrl *url.URL) map[string]string {
+func generateOAuthParams(httpMethod string, requestURL *url.URL) map[string]string {
 	log.Print("INFO: Generating OAuth Params")
 	oAuthParams := map[string]string{
-		"oauth_consumer_key" : credentials.ConsumerKey,
-		"oauth_nonce" : generateNonceBase32(),
-		"oauth_signature_method" : signatureMethod,
-		"oauth_timestamp" : strconv.FormatInt(time.Now().Unix(), 10),
-		"oauth_token" : credentials.AccessToken,
-		"oauth_version" : oauthVersion,
+		"oauth_consumer_key":     credentials.ConsumerKey,
+		"oauth_nonce":            generateNonceBase32(),
+		"oauth_signature_method": signatureMethod,
+		"oauth_timestamp":        strconv.FormatInt(time.Now().Unix(), 10),
+		"oauth_token":            credentials.AccessToken,
+		"oauth_version":          oauthVersion,
 	}
-	signature := generateOAuthSignature(oAuthParams, httpMethod, requestUrl)
+	signature := generateOAuthSignature(oAuthParams, httpMethod, requestURL)
 	oAuthParams["oauth_signature"] = signature
 	return oAuthParams
 }
@@ -151,20 +152,20 @@ func generateNonceBase32() string {
 	return strconv.FormatInt(now, 32) + strconv.FormatInt(rand.Int63(), 32)
 }
 
-func generateOAuthSignature(oauthParams map[string]string, httpMethod string, requestUrl *url.URL) string {
+func generateOAuthSignature(oauthParams map[string]string, httpMethod string, requestURL *url.URL) string {
 	log.Print("INFO: Generating Oauth Signature")
 	params := make(map[string]string)
 	for k, v := range oauthParams {
 		params[k] = v
 	}
-	for k := range requestUrl.Query() {
-		params[k] = requestUrl.Query().Get(k)
+	for k := range requestURL.Query() {
+		params[k] = requestURL.Query().Get(k)
 	}
 	parameterString := buildParameterString(params)
 	signingKey := []byte(credentials.ConsumerSecret + "&" + credentials.AccessTokenSecret)
 	mac := hmac.New(sha1.New, signingKey)
-	baseUrl := fmt.Sprintf("%s://%s%s", requestUrl.Scheme, requestUrl.Host, requestUrl.EscapedPath())
-	io.WriteString(mac, strings.ToUpper(httpMethod) + "&" + url.QueryEscape(baseUrl) + "&" + parameterString)
+	baseURL := fmt.Sprintf("%s://%s%s", requestURL.Scheme, requestURL.Host, requestURL.EscapedPath())
+	io.WriteString(mac, strings.ToUpper(httpMethod) + "&" + url.QueryEscape(baseURL) + "&" + parameterString)
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
